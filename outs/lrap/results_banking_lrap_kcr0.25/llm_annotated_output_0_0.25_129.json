@@ -1,0 +1,8 @@
+{
+    "utterance_ori_inds": [],
+    "true_cluster_ids": [],
+    "pred_cluster_ids": [],
+    "llm_pred_cluster_ids": [],
+    "unc_neighbors_ori_inds": [],
+    "unc_neighbors_labs": []
+}
