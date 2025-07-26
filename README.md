@@ -1,5 +1,5 @@
-# LRAP
-Boosting Generalized Category Discovery with LLM-based Residual-Augmented Graph Propagation(LRAP). The overall process is as follows.  
+# LDAA
+Boosting Generalized Category Discovery with LLM-based Dual Adversarial-Augmented Graph Propagation(LDAA). The overall process is as follows.  
 
 ![OVERVIEW](./overview.png)
 
@@ -24,7 +24,7 @@ git clone https://huggingface.co/bert-base-uncased ./pretrained_models/bert
 sh scripts/lrap/run_pretrain_$dataset$.sh
 ```
 
-**2. LRAP Turning**
+**2. LDAA Turning**
 ```bash
 sh scripts/lrap/run_lrap_$dataset$.sh 
 ```
