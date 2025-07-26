@@ -345,11 +345,6 @@ class RobustGCNLayer(nn.Module):
 
 
 class RobustGCNModel(nn.Module):
-    """
-    GCN model that works as a normal one in the forward pass
-    but also enables robustness certification and robust training
-    via the backward pass through the dual network.
-    """
 
     def __init__(self, adj, dims):
         super(RobustGCNModel, self).__init__()
@@ -430,10 +425,6 @@ class RobustGCNModel(nn.Module):
 
     def forward(self, input, nodes=None):
         """
-        Forward computation of the GCN, computes the logits for the
-        input nodes. Slices the adjacency matrices accordingly in all
-        the hidden layers so that only the necessary hidden activations
-        are computed.
         Parameters
         ----------
         input: torch.tensor binary, shape [N, D]
@@ -482,29 +473,15 @@ class RobustGCNModel(nn.Module):
             The binary node attributes.
 
         nodes: numpy.array, int64
-            The input nodes for which to compute the worst-case margins.
-        q:  int
-            per-node constraint on the number of attribute perturbations
-        Q:  int
-            global constraint on the number of attribute perturbations
         target_classes: torch.tensor, int64, dim [B,] or None
             The target classes of the nodes in the batch. For nodes in the training set,
             this should be the correct (known) class. For the unlabeled nodes, this should be
             the predicted class given the current weights.
         initialize_omega: bool
-            Whether the omega matrices should be initialized to their default value,
-            which is upper_bound/(upper_bound-lower_bound). This is only relevant for
-            robustness certification (not for robust training, which always uses
-            the default values for omega).
 
         Returns
         -------
         worst_case_bounds: torch.tensor float32, dim [len(nodes), K]
-            Lower bounds on the worst-case logit margins achievable given the input constraints.
-            A negative worst-case logit margin lower bound means that we cannot certify robustness.
-            A positive worst-case logit margin lower bound guarantees that the prediction will not
-            change, i.e. we can issue a robustness certificate if for a node ALL worst-case
-            logit margins are positive.
         """
 
         if not (torch.sort(input.unique().long().cpu())[0] == torch.tensor([0,1])).all():
@@ -512,7 +489,6 @@ class RobustGCNModel(nn.Module):
 
         input = input.float()
 
-        # compute upper/lower bounds first
         batch_size = len(nodes)
         bounds = []
         neighborhoods = self.get_neighborhoods(nodes)[::-1]
@@ -534,11 +510,9 @@ class RobustGCNModel(nn.Module):
             target_classes = self.predict(input, nodes, )
 
         predicted_onehot = torch.eye(self.K)[target_classes]
-        # [Batch, K, K]
         C_tensor = (predicted_onehot.unsqueeze(1) - torch.eye(self.K)).cuda()
         phis = [-C_tensor]
 
-        # final_objective = torch.zeros([batch_size, self.K], device="cuda")
         bias_terms = torch.zeros([batch_size, self.K], device="cuda")
         I_terms = torch.zeros([batch_size, self.K], device="cuda")
 
@@ -602,9 +576,6 @@ class RobustGCNModel(nn.Module):
             pert_dim_ixs = q_ixs_reshape.gather(-1, Q_ixs).cpu().numpy()
             perturbation_ixs = np.stack([pert_node_ixs, pert_dim_ixs], axis=-1)
 
-        # Select the smallest of the q largest values per node,
-        # or 0 if it is smaller than rho.
-        # [B, K, Num L-1 hop neighbors]
         eta = relu(q_largest_local[:, :, :, -1] - rho)
         # Compute Psi (c.f. the paper) and sum over it
         # [B, K]
@@ -629,7 +600,7 @@ def train(gcn_model, X, y, idx_train, idx_unlabeled, q, Q=12, n_iters=1000, meth
           margin_train=np.log(90/10), margin_unlabeled=np.log(60/40), batch_size=8,
           margin_iters=5, learning_rate=1e-2, weight_decay=1e-5):
     """
-    Train a (robust) GCN.
+    Train a (DAA) GCN.
 
     Parameters
     ----------
@@ -737,8 +708,6 @@ def train(gcn_model, X, y, idx_train, idx_unlabeled, q, Q=12, n_iters=1000, meth
 def certify(gcn_model, attrs, q, nodes=None, Q=12, optimize_omega=False, optimize_steps=5, batch_size=8,
            certify_nonrobustness=False, progress=False):
     """
-    Certify (non-) robustness of the input nodes given the input GCN and attributes.
-
     Parameters
     ----------
     gcn_model: RobustGCNModel
@@ -770,11 +739,8 @@ def certify(gcn_model, attrs, q, nodes=None, Q=12, optimize_omega=False, optimiz
     Returns
     -------
     robust_nodes: np.array, bool, [N,]
-        A boolean flag for each of the input nodes indicating whether a robustness certificate
-        can be issued.
     nonrobust_nodes: np.array, bool, [N,]
         A boolean flag for each of the input nodes indicating whether we can prove non-robustness.
-        If certify_nonrobustness is False, this contains False for every entry.
     """
 
     node_attrs = sparse_tensor(attrs).cuda().to_dense()
